@@ -7,7 +7,7 @@ common:
         - INTERFACE_STM32F411XE
         - USE_HAL_DRIVER
         - STM32F411xE
-        - DAPLINK_HIC_ID=0x97969908  # DAPLINK_HIC_ID_STM32F411xe
+        - DAPLINK_HIC_ID=0x9796990E  # DAPLINK_HIC_ID_STM32F411xe
         - __packed=__packed          # Prevent redefinition of __packed with ARMCC
         - DAPLINK_NO_ASSERT_FILENAMES
         - OS_CLOCK=96000000

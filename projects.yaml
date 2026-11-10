@@ -211,12 +211,13 @@ projects:
     stm32f411xe_bl:
         - *module_bl
         - records/hic_hal/stm32f411xe.yaml
-        - records/board/stm32f411re.yaml
+        - records/board/stm32f103xb_bl.yaml
     stm32f411xe_if:
         - *module_if
         - *module_hic_stm32f411xe
+        - records/board/stm32f103xb_bl.yaml
         #- records/family/all_family.yaml
-        - records/usb/usb-bulk.yaml
+        #- records/usb/usb-bulk.yaml
 
     # Other projects
     k20dx_ep_agora_if:

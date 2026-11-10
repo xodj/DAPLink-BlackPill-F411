@@ -1,7 +1,7 @@
     .syntax unified
     .arch armv7e-m
 
-    .section .stack
+    .section .stack, "aw", %nobits
     .align 3
 #ifdef __STACK_SIZE
     .equ    Stack_Size, __STACK_SIZE
@@ -16,7 +16,7 @@ __StackLimit:
 __StackTop:
     .size __StackTop, . - __StackTop
 
-    .section .heap
+    .section .heap, "aw", %nobits
     .align 3
 #ifdef __HEAP_SIZE
     .equ    Heap_Size, __HEAP_SIZE
