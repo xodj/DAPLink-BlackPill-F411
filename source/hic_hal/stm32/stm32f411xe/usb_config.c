@@ -347,7 +347,15 @@
 #define CDC_ENDPOINT 1
 #endif
 #define USBD_CDC_ACM_ENABLE             CDC_ENDPOINT
+// F411 OTG_FS: только EP0..EP3 (три пары EP1..EP3).
+#if (USBD_MSC_ENABLE)
+// С MSC: DAP (bulk или HID) = EP1, MSC = EP2, CDC BULK = EP3.
+// Для notification-endpoint номера не остаётся -> 0 = без него.
 #define USBD_CDC_ACM_EP_INTIN           0
+#else
+// Без MSC: HID = EP1, CDC INT = EP2, CDC BULK = EP3.
+#define USBD_CDC_ACM_EP_INTIN           2
+#endif
 #define USBD_CDC_ACM_EP_INTIN_STACK     0
 #define USBD_CDC_ACM_WMAXPACKETSIZE     16
 #define USBD_CDC_ACM_BINTERVAL          32
@@ -357,7 +365,7 @@
 #define USBD_CDC_ACM_EP_BULKIN          3
 #define USBD_CDC_ACM_EP_BULKOUT         3
 #define USBD_CDC_ACM_EP_BULKIN_STACK    0
-#define USBD_CDC_ACM_WMAXPACKETSIZE1    16
+#define USBD_CDC_ACM_WMAXPACKETSIZE1    64
 #define USBD_CDC_ACM_HS_ENABLE1         0
 #define USBD_CDC_ACM_HS_WMAXPACKETSIZE1 16
 #define USBD_CDC_ACM_HS_BINTERVAL1      0

@@ -46,10 +46,12 @@ bool reset_button_pressed(void)
 {
     return (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET);
 }
-
+ 
 uint8_t gpio_get_reset_btn_no_fwrd(void)
 {
-    return (nRESET_PIN_PORT->IDR & nRESET_PIN) ? 0 : 1;
+    // Кнопка KEY (PA0, активный уровень 0). nRESET цели (PB15) здесь читать нельзя:
+    // при выключенном SWD пин плавает и даёт ложные срабатывания.
+    return (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) ? 1 : 0;
 }
 
 uint8_t gpio_get_reset_btn_fwrd(void)

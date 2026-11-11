@@ -22,6 +22,7 @@
 #include "stm32f4xx.h"
 #include "cortex_m.h"
 #include "util.h"
+#include "daplink_addr.h"
 
 TIM_HandleTypeDef timer;
 uint32_t time_count;
@@ -33,6 +34,9 @@ void sdk_init()
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
     RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+    // Таблица векторов нашего образа (BL: 0x08000000, IF за загрузчиком: 0x08010000)
+    SCB->VTOR = DAPLINK_ROM_APP_START;
 
     HAL_Init();
 

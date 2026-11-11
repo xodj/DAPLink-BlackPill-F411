@@ -29,21 +29,42 @@
 #define DAPLINK_RAM_SIZE                0x00020000 // 128 KB RAM
 
 /* Flash Programming Info */
-#define DAPLINK_SECTOR_SIZE             0x00004000 // Макс. размер сектора (128 KB) для буфера
+#define DAPLINK_SECTOR_SIZE             0x00004000 // 16 KB: наименьший сектор F411 (остальные: 64 KB и 128 KB)
 #define DAPLINK_MIN_WRITE_SIZE          0x00000400
 
-/* ROM sizes */
+/* ROM layout.
+ * Сектора STM32F411CE: 0-3 = 16 KB, 4 = 64 KB, 5-7 = 128 KB.
+ *
+ * Сборка без загрузчика (DAPLINK_NO_BOOTLOADER): interface лежит с начала флеша,
+ * т.к. МК стартует с 0x08000000. Макрос можно задать в проекте; для сборки
+ * без MSC (stm32f411xe_dl) он включается автоматически.
+ */
+#if !defined(DAPLINK_NO_BOOTLOADER) && defined(DAPLINK_IF) && !defined(MSC_ENDPOINT)
+#define DAPLINK_NO_BOOTLOADER
+#endif
+
+#if defined(DAPLINK_NO_BOOTLOADER)
 #define DAPLINK_ROM_BL_START            0x08000000
-#define DAPLINK_ROM_BL_SIZE             0x0000C000 // 48 KB (Сектора 0, 1, 2 по 16 KB)
+#define DAPLINK_ROM_BL_SIZE             0x00000000 // загрузчика нет
+
+#define DAPLINK_ROM_CONFIG_ADMIN_START  0x08000000
+#define DAPLINK_ROM_CONFIG_ADMIN_SIZE   0x00000000 // не используется
+
+#define DAPLINK_ROM_IF_START            0x08000000
+#define DAPLINK_ROM_IF_SIZE             0x00060000 // 384 KB (сектора 0-6)
+#else
+#define DAPLINK_ROM_BL_START            0x08000000
+#define DAPLINK_ROM_BL_SIZE             0x0000C000 // 48 KB (сектора 0-2)
 
 #define DAPLINK_ROM_CONFIG_ADMIN_START  0x0800C000
-#define DAPLINK_ROM_CONFIG_ADMIN_SIZE   0x00004000 // 16 KB (Сектор 3)
+#define DAPLINK_ROM_CONFIG_ADMIN_SIZE   0x00004000 // 16 KB (сектор 3)
 
 #define DAPLINK_ROM_IF_START            0x08010000
-#define DAPLINK_ROM_IF_SIZE             0x00050000 // 320 KB (Сектор 4 [64KB] + Сектора 5, 6 [по 128KB])
+#define DAPLINK_ROM_IF_SIZE             0x00050000 // 320 KB (сектор 4 [64 KB] + сектора 5, 6 [по 128 KB])
+#endif
 
 #define DAPLINK_ROM_CONFIG_USER_START   0x08060000
-#define DAPLINK_ROM_CONFIG_USER_SIZE    0x00020000 // 128 KB (Сектор 7)
+#define DAPLINK_ROM_CONFIG_USER_SIZE    0x00020000 // 128 KB (сектор 7)
 
 /* RAM sizes */
 #define DAPLINK_RAM_APP_START           DAPLINK_RAM_START

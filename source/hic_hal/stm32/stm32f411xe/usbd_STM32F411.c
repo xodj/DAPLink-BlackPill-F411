@@ -27,6 +27,8 @@ COMPILER_ASSERT((RX_FIFO_SIZE + TX0_FIFO_SIZE + TX1_FIFO_SIZE + TX2_FIFO_SIZE + 
 COMPILER_ASSERT((USBD_BULK_EP_BULKIN == 1) && (USBD_BULK_WMAXPACKETSIZE <= TX1_FIFO_SIZE));
 COMPILER_ASSERT((USBD_MSC_EP_BULKIN == 2) && (USBD_MSC_WMAXPACKETSIZE <= TX2_FIFO_SIZE));
 COMPILER_ASSERT(USBD_CDC_ACM_1_EP_BULKIN == 3);
+// INTIN == 0: нет notification-endpoint (сборка с MSC), иначе EP2
+COMPILER_ASSERT((USBD_CDC_ACM_1_EP_INTIN == 0) || (USBD_CDC_ACM_1_EP_INTIN == 2));
 
 
 
@@ -40,32 +42,22 @@ static uint32_t HID_IntInPacketData[(USBD_HID_MAX_PACKET + 3) / 4];
 static uint32_t CDC_ACM_IntInPacketData[USB_CDC_ACM_EP_COUNT][(USBD_CDC_ACM_MAX_PACKET + 3) / 4];
 #endif
 
-static uint32_t *InPacketDataPtr[USBD_EP_NUM] =
+// Индексы = номера endpoint (0..USBD_EP_NUM), поэтому размер USBD_EP_NUM + 1
+static uint32_t *InPacketDataPtr[USBD_EP_NUM + 1] =
 {
-/* endpoint 0 */
-    0,
-/* endpoint 1 */
-#if ((USBD_HID_ENABLE == 1) && (USBD_HID_EP_INTIN == 1))
-    HID_IntInPacketData,
-#elif (USBD_EP_NUM > 1)
-    0,
+    [0] = 0,
+#if ((USBD_HID_ENABLE == 1) && (USBD_HID_EP_INTIN != 0))
+    [USBD_HID_EP_INTIN] = HID_IntInPacketData,
 #endif
-/* endpoint 2 */
-#if (USBD_EP_NUM > 2)
-    0,
-#endif
-/* endpoint 3 */
-#if ((USBD_CDC_ACM_ENABLE == 1) && (USBD_CDC_ACM_1_EP_INTIN == 3))
-    CDC_ACM_IntInPacketData[0],
-#elif (USBD_EP_NUM > 3)
-    0,
+#if ((USBD_CDC_ACM_ENABLE == 1) && (USBD_CDC_ACM_1_EP_INTIN != 0))
+    [USBD_CDC_ACM_1_EP_INTIN] = CDC_ACM_IntInPacketData[0],
 #endif
 };
 
-static uint32_t OutMaxPacketSize[USBD_EP_NUM];
-static uint8_t  OutPacketCnt[USBD_EP_NUM];
-static uint8_t  InPacketCnt[USBD_EP_NUM];
-static uint32_t InPacketDataCnt[USBD_EP_NUM];
+static uint32_t OutMaxPacketSize[USBD_EP_NUM + 1];
+static uint8_t  OutPacketCnt[USBD_EP_NUM + 1];
+static uint8_t  InPacketCnt[USBD_EP_NUM + 1];
+static uint32_t InPacketDataCnt[USBD_EP_NUM + 1];
 static uint32_t InPacketDataReady;
 static uint32_t SyncWriteEP;
 
@@ -89,14 +81,10 @@ void USBD_Init(void)
 
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
 
-    // Включаем встроенный Full-Speed трансивер и отключаем проверку VBUS (на Black Pill PA9 не подключен к VBUS)
-#ifdef USB_OTG_GCCFG_NOVBUSSENS
-    OTG->GCCFG |= USB_OTG_GCCFG_PWRDWN | USB_OTG_GCCFG_NOVBUSSENS;
-#else
-    OTG->GCCFG |= USB_OTG_GCCFG_PWRDWN | (1U << 21);
-#endif
-    OTG->GCCFG &= ~(USB_OTG_GCCFG_VBUSBSEN | USB_OTG_GCCFG_VBUSASEN);
+    // Встроенный Full-Speed трансивер
+    OTG->GUSBCFG |= USB_OTG_GUSBCFG_PHYSEL;
 
+    // Core soft reset
     timeout_cntr = 1000;
     while (!(OTG->GRSTCTL & USB_OTG_GRSTCTL_AHBIDL)) {
         if (!timeout_cntr--) break;
@@ -109,6 +97,18 @@ void USBD_Init(void)
         HAL_Delay(1);
     }
     HAL_Delay(3);
+
+    // После сброса: включаем трансивер и отключаем проверку VBUS
+    // (на Black Pill PA9 не подключен к VBUS)
+#ifdef USB_OTG_GCCFG_NOVBUSSENS
+    OTG->GCCFG |= USB_OTG_GCCFG_PWRDWN | USB_OTG_GCCFG_NOVBUSSENS;
+#else
+    OTG->GCCFG |= USB_OTG_GCCFG_PWRDWN | (1U << 21);
+#endif
+    OTG->GCCFG &= ~(USB_OTG_GCCFG_VBUSBSEN | USB_OTG_GCCFG_VBUSASEN);
+
+    // USB turnaround time: для HCLK >= 32 МГц TRDT = 6 (RM0383)
+    OTG->GUSBCFG = (OTG->GUSBCFG & ~USB_OTG_GUSBCFG_TRDT) | (6U << USB_OTG_GUSBCFG_TRDT_Pos);
 
     USB_SetCurrentMode(OTG, USB_DEVICE_MODE);
     USB_SetDevSpeed(OTG, USB_OTG_SPEED_FULL);
@@ -436,7 +436,7 @@ USBD_SignalHandler();
 }
 void USBD_Handler(void)
 {
-uint32_t istr, val, num, i, msk;
+uint32_t istr, val, num, i, msk, doepint;
 istr = OTG->GINTSTS & OTG->GINTMSK;
 if (istr & USB_OTG_GINTSTS_USBRST) {
 USBD_Reset();
@@ -462,10 +462,10 @@ OTG->GINTSTS = USB_OTG_GINTSTS_WKUINT;
 }
 if (istr & USB_OTG_GINTSTS_ENUMDNE) {
 USBx_INEP(0)->DIEPCTL &= ~USB_OTG_DIEPCTL_MPSIZ;
-USBx_INEP(0)->DIEPCTL |= OutMaxPacketSize[0];
+// MPSIZ для EP0: 0 = 64 байта (поле 2 бита, а не размер в байтах)
 USBx_DEVICE->DCTL |= USB_OTG_DCTL_CGINAK;
 USBx_DEVICE->DCTL |= USB_OTG_DCTL_CGONAK;
-OTG->GINTSTS |= USB_OTG_GINTSTS_ENUMDNE;
+OTG->GINTSTS = USB_OTG_GINTSTS_ENUMDNE;
 }
 if (istr & USB_OTG_GINTSTS_SOF) {
 if (USBD_P_SOF_Event) {
@@ -521,18 +521,19 @@ msk &= ~(1 << i);
 break;
 }
 }
-if (USBx_OUTEP(num)->DOEPINT & USB_OTG_DOEPINT_EPDISD) {
-USBx_OUTEP(num)->DOEPINT |= USB_OTG_DOEPINT_EPDISD;
+doepint = USBx_OUTEP(num)->DOEPINT;
+if (doepint & USB_OTG_DOEPINT_EPDISD) {
+    USBx_OUTEP(num)->DOEPINT = USB_OTG_DOEPINT_EPDISD; // rc_w1: пишем только нужный бит
 }
-if ((USBx_OUTEP(num)->DOEPINT & USB_OTG_DOEPINT_XFRC) | (USBx_OUTEP(num)->DOEPINT & USB_OTG_DOEPINT_STUP)) {
-USBx_OUTEP(num)->DOEPTSIZ =
-(OutPacketCnt[num] << USB_OTG_DOEPTSIZ_PKTCNT_Pos) |
-(OutMaxPacketSize[num]);
-if (num == 0) {
-USBx_OUTEP(0)->DOEPTSIZ |= USB_OTG_DOEPTSIZ_STUPCNT_0;
-}
-USBx_OUTEP(num)->DOEPCTL |= USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_CNAK;
-USBx_OUTEP(num)->DOEPINT |= USB_OTG_DOEPINT_XFRC;
+if (doepint & (USB_OTG_DOEPINT_XFRC | USB_OTG_DOEPINT_STUP)) {
+    USBx_OUTEP(num)->DOEPINT = (USB_OTG_DOEPINT_XFRC | USB_OTG_DOEPINT_STUP);
+    USBx_OUTEP(num)->DOEPTSIZ =
+        (OutPacketCnt[num] << USB_OTG_DOEPTSIZ_PKTCNT_Pos) |
+        (OutMaxPacketSize[num]);
+    if (num == 0) {
+        USBx_OUTEP(0)->DOEPTSIZ |= USB_OTG_DOEPTSIZ_STUPCNT_0;
+    }
+    USBx_OUTEP(num)->DOEPCTL |= USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_CNAK;
 }
 }
 }

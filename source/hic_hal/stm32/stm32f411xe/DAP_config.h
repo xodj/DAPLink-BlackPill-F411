@@ -188,6 +188,11 @@ __STATIC_INLINE void DAP_SETUP(void)
 
     PORT_OFF();
 
+    // Счётчик циклов для TIMESTAMP_GET
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
     HAL_GPIO_WritePin(CONNECTED_LED_PORT, CONNECTED_LED_PIN, GPIO_PIN_SET);
     gpio_init.Pin = CONNECTED_LED_PIN;
     gpio_init.Mode = GPIO_MODE_OUTPUT_PP;

@@ -18,6 +18,22 @@ static uint32_t get_sector(uint32_t address)
     return FLASH_SECTOR_7;
 }
 
+// Начала физических секторов STM32F411CE
+static const uint32_t s_sector_start[] = {
+    0x08000000, 0x08004000, 0x08008000, 0x0800C000,
+    0x08010000, 0x08020000, 0x08040000, 0x08060000
+};
+
+static int is_sector_start(uint32_t address)
+{
+    for (uint32_t i = 0; i < sizeof(s_sector_start) / sizeof(s_sector_start[0]); i++) {
+        if (s_sector_start[i] == address) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 uint32_t Init(uint32_t adr, uint32_t clk, uint32_t fnc)
 {
     return 0;
@@ -62,6 +78,13 @@ uint32_t EraseSector(uint32_t adr)
     FLASH_EraseInitTypeDef erase_init;
     uint32_t error;
     uint32_t ret = 0;
+
+    // DAPLink стирает "секторами" по DAPLINK_SECTOR_SIZE (16 KB), а физические
+    // сектора F411 бывают 16/64/128 KB. Если adr лежит внутри уже стёртого сектора,
+    // повторное стирание уничтожило бы только что записанные данные -> пропускаем.
+    if (!is_sector_start(adr)) {
+        return 0;
+    }
 
     memset(&erase_init, 0, sizeof(erase_init));
     erase_init.TypeErase = FLASH_TYPEERASE_SECTORS;
